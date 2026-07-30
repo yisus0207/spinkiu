@@ -21,6 +21,8 @@ import {
   WifiOff,
   Layers,
   CloudOff,
+  Zap,
+  ZapOff,
 } from 'lucide-react';
 
 const formatDateTime = (fechaStr: string) => {
@@ -88,6 +90,10 @@ export default function EvidencePage() {
   // Menú desplegable propio del filtro de proveedor
   const [provOpen, setProvOpen] = useState(false);
 
+  // Flash / linterna de la cámara
+  const [torchOn, setTorchOn] = useState(false);
+  const [torchAvailable, setTorchAvailable] = useState(false);
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -131,6 +137,12 @@ export default function EvidencePage() {
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
         setCameraError(null);
+
+        // ¿La cámara soporta flash/linterna (torch)?
+        const track = stream.getVideoTracks()[0];
+        const caps = track?.getCapabilities?.() as any;
+        setTorchAvailable(!!(caps && caps.torch));
+        setTorchOn(false);
       } catch {
         setCameraError('No se pudo acceder a la cámara. Revisa los permisos o sube una foto desde tu galería.');
       }
@@ -142,8 +154,22 @@ export default function EvidencePage() {
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
       }
+      setTorchOn(false);
+      setTorchAvailable(false);
     };
   }, [isModalOpen, stage]);
+
+  const toggleTorch = async () => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    try {
+      const next = !torchOn;
+      await track.applyConstraints({ advanced: [{ torch: next } as any] });
+      setTorchOn(next);
+    } catch {
+      setTorchAvailable(false); // el dispositivo lo rechazó
+    }
+  };
 
   const openModal = () => {
     setStage('capture');
@@ -542,6 +568,23 @@ export default function EvidencePage() {
                         <>
                           <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
                           <div className="absolute inset-0 pointer-events-none border-[3px] border-white/10 rounded-2xl" />
+
+                          {/* Botón de flash / linterna (solo si el dispositivo lo soporta) */}
+                          {torchAvailable && (
+                            <button
+                              type="button"
+                              onClick={toggleTorch}
+                              aria-pressed={torchOn}
+                              title={torchOn ? 'Apagar flash' : 'Encender flash'}
+                              className={`absolute top-3 right-3 h-11 w-11 rounded-full flex items-center justify-center backdrop-blur transition-all cursor-pointer border ${
+                                torchOn
+                                  ? 'bg-amber-400 text-black border-amber-300 shadow-lg shadow-amber-500/40'
+                                  : 'bg-black/50 text-white border-white/20 hover:bg-black/70'
+                              }`}
+                            >
+                              {torchOn ? <Zap size={20} /> : <ZapOff size={20} />}
+                            </button>
+                          )}
                         </>
                       )}
                     </div>
