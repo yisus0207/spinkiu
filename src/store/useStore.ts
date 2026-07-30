@@ -1,0 +1,462 @@
+import { create } from 'zustand';
+import { db, BusinessProfile, Client, Charge, Invoice, Product, Employee } from '@/lib/db';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+
+interface AppState {
+  user: any | null;
+  profile: BusinessProfile | null;
+  clients: Client[];
+  charges: Record<string, Charge[]>; // client_id -> charges
+  invoices: Invoice[];
+  products: Product[];
+  employees: Employee[];
+  userPermissions: string[]; // Módulos a los que se tiene acceso
+  isLoading: boolean;
+  error: string | null;
+
+  // Acciones de autenticación y carga inicial
+  setSession: (sessionUser: any) => Promise<void>;
+  clearSession: () => void;
+  fetchProfile: () => Promise<void>;
+  updateProfile: (updates: Partial<BusinessProfile>) => Promise<void>;
+  fetchPermissions: () => Promise<void>;
+
+  // Acciones de Clientes
+  fetchClients: () => Promise<void>;
+  addClient: (clientData: Omit<Client, 'id' | 'negocio_id' | 'created_at'>) => Promise<void>;
+  updateClient: (id: string, updates: Partial<Client>) => Promise<void>;
+  deleteClient: (id: string) => Promise<void>;
+
+  // Acciones de Cargos
+  fetchCharges: (clienteId: string) => Promise<void>;
+  addCharge: (chargeData: Omit<Charge, 'id' | 'negocio_id' | 'created_at' | 'invoice_id'>) => Promise<void>;
+  deleteCharge: (id: string, clienteId: string) => Promise<void>;
+
+  // Acciones de Facturas
+  fetchInvoices: (clienteId?: string) => Promise<void>;
+  generateInvoice: (
+    clienteId: string,
+    items: Array<{ product_id: string | null; descripcion: string; fecha?: string | null; cantidad: number; precio_unitario: number; total: number }>,
+    subtotal: number,
+    total: number,
+    estado: 'pendiente' | 'pagado',
+    chargeIds?: string[],
+    montoPagado?: number,
+    deudaPendiente?: number
+  ) => Promise<Invoice>;
+  deleteInvoice: (id: string) => Promise<void>;
+  updateInvoiceStatus: (id: string, estado: 'pendiente' | 'pagado') => Promise<void>;
+
+  // Acciones de Inventario
+  fetchProducts: () => Promise<void>;
+  addProduct: (prodData: Omit<Product, 'id' | 'negocio_id' | 'created_at'>) => Promise<void>;
+  updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
+
+  // Acciones de Empleados
+  fetchEmployees: () => Promise<void>;
+  inviteEmployee: (nombre: string, email: string, permisos: string[]) => Promise<void>;
+  updateEmployee: (id: string, updates: Partial<Pick<Employee, 'nombre' | 'email' | 'permisos' | 'activo'>>) => Promise<void>;
+  deleteEmployee: (id: string) => Promise<void>;
+}
+
+export const useStore = create<AppState>((set, get) => ({
+  user: null,
+  profile: null,
+  clients: [],
+  charges: {},
+  invoices: [],
+  products: [],
+  employees: [],
+  userPermissions: ['dashboard', 'clients'], // Permisos por defecto
+  isLoading: false,
+  error: null,
+
+  // --- AUTENTICACIÓN & SESIÓN ---
+  setSession: async (sessionUser) => {
+    set({ user: sessionUser, isLoading: true });
+    try {
+      // Registrar correo del usuario activo si es local para poder calcular sus permisos
+      if (!isSupabaseConfigured) {
+        localStorage.setItem('spinkiu_local_user_mail', sessionUser.email || 'demo@spinkiu.com');
+      }
+
+      await get().fetchProfile();
+      await get().fetchPermissions();
+      await get().fetchClients();
+      await get().fetchInvoices();
+      await get().fetchProducts();
+      await get().fetchEmployees();
+    } catch (err: any) {
+      set({ error: err.message || 'Error al inicializar sesión' });
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  clearSession: () => {
+    set({
+      user: null,
+      profile: null,
+      clients: [],
+      charges: {},
+      invoices: [],
+      products: [],
+      employees: [],
+      userPermissions: ['dashboard', 'clients'],
+      error: null
+    });
+    if (!isSupabaseConfigured) {
+      localStorage.removeItem('spinkiu_local_user_mail');
+    }
+  },
+
+  fetchProfile: async () => {
+    try {
+      const profile = await db.getProfile();
+      set({ profile });
+    } catch (err: any) {
+      set({ error: err.message || 'Error al obtener perfil' });
+    }
+  },
+
+  updateProfile: async (updates) => {
+    set({ isLoading: true });
+    try {
+      const updated = await db.updateProfile(updates);
+      set({ profile: updated });
+    } catch (err: any) {
+      set({ error: err.message || 'Error al actualizar perfil' });
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  fetchPermissions: async () => {
+    try {
+      const perms = await db.getMyPermissions();
+      if (perms) {
+        set({ userPermissions: perms });
+      }
+    } catch (err: any) {
+      console.error('Error al obtener permisos:', err);
+    }
+  },
+
+  // --- CLIENTES ---
+  fetchClients: async () => {
+    try {
+      const clients = await db.getClients();
+      set({ clients });
+    } catch (err: any) {
+      set({ error: err.message || 'Error al obtener clientes' });
+    }
+  },
+
+  addClient: async (clientData) => {
+    set({ isLoading: true });
+    try {
+      const newClient = await db.createClient(clientData);
+      set((state) => ({
+        clients: [...state.clients, newClient].sort((a, b) => a.nombre.localeCompare(b.nombre))
+      }));
+    } catch (err: any) {
+      set({ error: err.message || 'Error al crear cliente' });
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  updateClient: async (id, updates) => {
+    set({ isLoading: true });
+    try {
+      const updated = await db.updateClient(id, updates);
+      set((state) => ({
+        clients: state.clients.map((c) => (c.id === id ? updated : c)).sort((a, b) => a.nombre.localeCompare(b.nombre))
+      }));
+    } catch (err: any) {
+      set({ error: err.message || 'Error al actualizar cliente' });
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  deleteClient: async (id) => {
+    set({ isLoading: true });
+    try {
+      await db.deleteClient(id);
+      set((state) => {
+        const nextCharges = { ...state.charges };
+        delete nextCharges[id];
+        return {
+          clients: state.clients.filter((c) => c.id !== id),
+          charges: nextCharges,
+          invoices: state.invoices.filter((i) => i.cliente_id !== id)
+        };
+      });
+    } catch (err: any) {
+      set({ error: err.message || 'Error al eliminar cliente' });
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  // --- CARGOS ACUMULATIVOS ---
+  fetchCharges: async (clienteId) => {
+    try {
+      const chargesList = await db.getCharges(clienteId);
+      set((state) => ({
+        charges: {
+          ...state.charges,
+          [clienteId]: chargesList
+        }
+      }));
+    } catch (err: any) {
+      set({ error: err.message || 'Error al obtener cargos' });
+    }
+  },
+
+  addCharge: async (chargeData) => {
+    set({ isLoading: true });
+    try {
+      const newCharge = await db.createCharge(chargeData);
+      const clienteId = chargeData.cliente_id;
+      set((state) => {
+        const currentCharges = state.charges[clienteId] || [];
+        return {
+          charges: {
+            ...state.charges,
+            [clienteId]: [newCharge, ...currentCharges]
+          }
+        };
+      });
+    } catch (err: any) {
+      set({ error: err.message || 'Error al crear cargo' });
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  deleteCharge: async (id, clienteId) => {
+    set({ isLoading: true });
+    try {
+      await db.deleteCharge(id);
+      set((state) => {
+        const currentCharges = state.charges[clienteId] || [];
+        return {
+          charges: {
+            ...state.charges,
+            [clienteId]: currentCharges.filter((c) => c.id !== id)
+          }
+        };
+      });
+    } catch (err: any) {
+      set({ error: err.message || 'Error al eliminar cargo' });
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  // --- FACTURAS ---
+  fetchInvoices: async (clienteId) => {
+    try {
+      const invoices = await db.getInvoices(clienteId);
+      set((state) => {
+        if (clienteId) {
+          const otherInvoices = state.invoices.filter((i) => i.cliente_id !== clienteId);
+          return { invoices: [...otherInvoices, ...invoices].sort((a, b) => new Date(b.fecha_emision).getTime() - new Date(a.fecha_emision).getTime()) };
+        }
+        return { invoices };
+      });
+    } catch (err: any) {
+      set({ error: err.message || 'Error al obtener facturas' });
+    }
+  },
+
+  generateInvoice: async (clienteId, items, subtotal, total, estado, chargeIds, montoPagado, deudaPendiente) => {
+    set({ isLoading: true });
+    try {
+      const newInvoice = await db.createInvoice(clienteId, items, subtotal, total, estado, chargeIds, montoPagado, deudaPendiente);
+      
+      set((state) => ({
+        invoices: [newInvoice, ...state.invoices]
+      }));
+      
+      // Sincronizar catálogo de productos e historial del cliente
+      await get().fetchProducts();
+      await get().fetchCharges(clienteId);
+      
+      return newInvoice;
+    } catch (err: any) {
+      set({ error: err.message || 'Error al generar factura' });
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  deleteInvoice: async (id) => {
+    set({ isLoading: true });
+    try {
+      const invoice = get().invoices.find((i) => i.id === id);
+      await db.deleteInvoice(id);
+      
+      set((state) => ({
+        invoices: state.invoices.filter((i) => i.id !== id)
+      }));
+
+      // Sincronizar inventario y cargos
+      await get().fetchProducts();
+      if (invoice) {
+        await get().fetchCharges(invoice.cliente_id);
+      }
+    } catch (err: any) {
+      set({ error: err.message || 'Error al eliminar factura' });
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  updateInvoiceStatus: async (id, estado) => {
+    set({ isLoading: true });
+    try {
+      await db.updateInvoiceStatus(id, estado);
+      set((state) => ({
+        invoices: state.invoices.map((i) => (i.id === id ? { ...i, estado } : i))
+      }));
+    } catch (err: any) {
+      set({ error: err.message || 'Error al cambiar estado de factura' });
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  // --- INVENTARIO / PRODUCTOS ---
+  fetchProducts: async () => {
+    try {
+      const list = await db.getProducts();
+      set({ products: list });
+    } catch (err: any) {
+      set({ error: err.message || 'Error al obtener inventario' });
+    }
+  },
+
+  addProduct: async (prodData) => {
+    set({ isLoading: true });
+    try {
+      const newProduct = await db.createProduct(prodData);
+      set((state) => ({
+        products: [...state.products, newProduct].sort((a, b) => a.nombre.localeCompare(b.nombre))
+      }));
+    } catch (err: any) {
+      set({ error: err.message || 'Error al añadir producto' });
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  updateProduct: async (id, updates) => {
+    set({ isLoading: true });
+    try {
+      const updated = await db.updateProduct(id, updates);
+      set((state) => ({
+        products: state.products.map(p => p.id === id ? updated : p).sort((a, b) => a.nombre.localeCompare(b.nombre))
+      }));
+    } catch (err: any) {
+      set({ error: err.message || 'Error al actualizar producto' });
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  deleteProduct: async (id) => {
+    set({ isLoading: true });
+    try {
+      await db.deleteProduct(id);
+      set((state) => ({
+        products: state.products.filter(p => p.id !== id)
+      }));
+    } catch (err: any) {
+      set({ error: err.message || 'Error al eliminar producto' });
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  // --- EMPLEADOS ---
+  fetchEmployees: async () => {
+    try {
+      const list = await db.getEmployees();
+      set({ employees: list });
+    } catch (err: any) {
+      set({ error: err.message || 'Error al obtener empleados' });
+    }
+  },
+
+  inviteEmployee: async (nombre, email, permisos) => {
+    set({ isLoading: true });
+    try {
+      const newEmp = await db.inviteEmployee(nombre, email, permisos);
+      set((state) => ({
+        employees: [...state.employees, newEmp]
+      }));
+    } catch (err: any) {
+      set({ error: err.message || 'Error al invitar empleado' });
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  deleteEmployee: async (id) => {
+    set({ isLoading: true });
+    try {
+      await db.deleteEmployee(id);
+      set((state) => ({
+        employees: state.employees.filter(e => e.id !== id)
+      }));
+    } catch (err: any) {
+      set({ error: err.message || 'Error al eliminar empleado' });
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  updateEmployee: async (id, updates) => {
+    set({ isLoading: true });
+    try {
+      const updated = await db.updateEmployee(id, updates);
+      set((state) => ({
+        employees: state.employees.map(e => e.id === id ? updated : e)
+      }));
+    } catch (err: any) {
+      set({ error: err.message || 'Error al actualizar empleado' });
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  }
+}));
+
+// Escuchador de autenticación de Supabase automático
+if (isSupabaseConfigured && supabase) {
+  supabase.auth.onAuthStateChange(async (event, session) => {
+    if (session?.user) {
+      await useStore.getState().setSession(session.user);
+    } else {
+      useStore.getState().clearSession();
+    }
+  });
+}
