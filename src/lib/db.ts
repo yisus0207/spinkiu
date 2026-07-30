@@ -526,16 +526,18 @@ export const db = {
   // Obtiene los permisos del usuario activo
   async getMyPermissions(): Promise<string[] | null> {
     if (isSupabaseConfigured && supabase) {
-      const { data: { user } } = await supabase.auth.getUser();
+      // getSession() lee la sesión local (rápido y confiable), no getUser() (red)
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) return null;
 
-      // Intentar obtener de tabla employees
+      // Intentar obtener de tabla employees (maybeSingle evita el error 406 si no existe)
       const { data: employee } = await supabase
         .from('employees')
         .select('permisos, activo')
         .eq('id', user.id)
-        .single();
-      
+        .maybeSingle();
+
       if (employee) {
         if (employee.activo === false) {
           return []; // Retornar vacío si está bloqueado/desactivado

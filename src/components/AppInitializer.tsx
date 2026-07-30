@@ -100,6 +100,12 @@ export default function AppInitializer({ children }: { children: React.ReactNode
       apply(stored?.user ?? null);
       setIsReady(true); // listo ya, sin esperar a Supabase
 
+      // 1b. Confirmar con la API oficial (por si el formato de storage difiere).
+      //     No bloquea la carga; solo corrige si hace falta.
+      supabase.auth.getSession()
+        .then(({ data: { session } }) => { if (mounted && session?.user) apply(session.user); })
+        .catch(() => { /* offline: se usa lo leído de localStorage */ });
+
       // 2. Escuchar cambios reales (login/logout). Deferido para no bloquear el
       //    cliente de auth. Cuando hay red, confirma/actualiza la sesión.
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
