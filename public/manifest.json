@@ -3,6 +3,7 @@
   "short_name": "Spinkiu",
   "description": "Plataforma para gestión de proveedores, cuentas corrientes, facturación acumulativa e inventario.",
   "start_url": "/dashboard",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#020617",
@@ -10,10 +11,16 @@
   "lang": "es",
   "icons": [
     {
-      "src": "/globe.svg",
+      "src": "/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     }
   ]
 }

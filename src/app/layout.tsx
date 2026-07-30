@@ -4,6 +4,7 @@ import "./globals.css";
 import AppInitializer from "@/components/AppInitializer";
 import Navigation from "@/components/Navigation";
 import Header from "@/components/Header";
+import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 
 const fontInter = Inter({
   variable: "--font-inter",
@@ -23,6 +24,15 @@ export const metadata: Metadata = {
   title: "Spinkiu - Facturación Acumulativa",
   description: "Plataforma premium para gestión de clientes y facturación acumulativa.",
   manifest: "/manifest.json",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icon.svg" }],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Spinkiu",
+  },
 };
 
 export const viewport: Viewport = {
@@ -44,6 +54,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col font-sans text-slate-100 antialiased selection:bg-blue-500/30 selection:text-white" suppressHydrationWarning>
         {/* Fondo ambiental cinematográfico detrás de toda la app */}
         <div className="ambient-bg" aria-hidden="true" />
+        <PWAInstallPrompt />
         <AppInitializer>
           <div className="flex-1 flex flex-col md:flex-row">
             <Navigation />

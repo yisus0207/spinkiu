@@ -13,7 +13,6 @@ import {
   ArrowRight,
   AlertCircle,
   Sparkles,
-  Database,
   Receipt,
   Boxes,
   Camera,
@@ -186,35 +185,35 @@ export default function AuthPage() {
       </aside>
 
       {/* ===================== PANEL DEL FORMULARIO (derecha) ===================== */}
-      <main className="relative flex flex-col justify-center items-center px-4 py-8 min-h-dvh overflow-hidden">
+      <main className="relative flex flex-col justify-center items-center px-4 py-6 min-h-dvh overflow-hidden">
         {/* Orbes suaves detrás del formulario (solo se ven en móvil, donde no hay panel izquierdo) */}
         <div className="absolute top-0 left-1/3 -translate-x-1/2 -translate-y-1/4 w-[24rem] h-[24rem] bg-blue-500/15 rounded-full blur-[110px] pointer-events-none lg:hidden" />
         <div className="absolute bottom-0 right-1/4 translate-x-1/3 translate-y-1/4 w-[22rem] h-[22rem] bg-indigo-500/12 rounded-full blur-[120px] pointer-events-none lg:hidden" />
 
         <div className="w-full max-w-md z-10 animate-rise">
           {/* Marca (solo móvil, ya que el panel izquierdo está oculto) */}
-          <div className="lg:hidden mb-7">
+          <div className="lg:hidden mb-4">
             <div className="flex flex-col items-center text-center">
-              <div className="relative mb-4">
+              <div className="relative mb-2.5">
                 <div className="absolute inset-0 bg-blue-500/40 blur-2xl rounded-full" />
-                <div className="relative h-[68px] w-[68px] rounded-[1.35rem] bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-xl shadow-blue-600/40 ring-1 ring-white/20">
-                  <Sparkles size={32} />
+                <div className="relative h-12 w-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/40 ring-1 ring-white/20">
+                  <Sparkles size={24} />
                 </div>
               </div>
-              <h1 className="text-[2.6rem] leading-none font-display font-semibold tracking-tight text-gradient">Spinkiu</h1>
-              <p className="text-sm text-slate-400 mt-2 max-w-[16rem]">Facturación, inventario y evidencias para tu negocio.</p>
+              <h1 className="text-[1.7rem] leading-none font-display font-semibold tracking-tight text-gradient">Spinkiu</h1>
+              <p className="text-xs text-slate-400 mt-1.5 max-w-[15rem]">Facturación, inventario y evidencias.</p>
             </div>
 
             {/* Chips de funciones */}
-            <div className="flex flex-wrap justify-center gap-2 mt-5">
+            <div className="flex flex-wrap justify-center gap-1.5 mt-3">
               {features.map((f) => {
                 const Icon = f.icon;
                 return (
                   <span
                     key={f.title}
-                    className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-300 bg-white/5 border border-white/10 rounded-full px-3 py-1.5 backdrop-blur"
+                    className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-300 bg-white/5 border border-white/10 rounded-full px-2.5 py-1"
                   >
-                    <Icon size={12} className="text-blue-300" />
+                    <Icon size={11} className="text-blue-300" />
                     {f.chip}
                   </span>
                 );
@@ -233,25 +232,9 @@ export default function AuthPage() {
           </div>
 
           {/* Tarjeta de Autenticación */}
-          <div className="w-full glass-card rounded-3xl p-6 md:p-8">
-            {/* Indicador de Estado del Servidor */}
-            <div
-              className={`flex items-center gap-2 mb-6 px-3 py-2 rounded-xl text-xs border ${
-                isSupabaseConfigured
-                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                  : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-              }`}
-            >
-              <Database size={14} className="shrink-0" />
-              <span>
-                {isSupabaseConfigured
-                  ? 'Base de datos en línea (Supabase) activa'
-                  : 'Modo local: guardando datos en el dispositivo'}
-              </span>
-            </div>
-
+          <div className="w-full glass-card rounded-3xl p-5 md:p-8">
             {/* Tabs */}
-            <div className="relative flex p-1 mb-6 bg-slate-950/60 border border-white/10 rounded-xl">
+            <div className="relative flex p-1 mb-5 bg-slate-950/60 border border-white/10 rounded-xl">
               <button
                 onClick={() => { setIsLogin(true); setError(null); }}
                 className={`relative flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all cursor-pointer z-10 ${
@@ -351,7 +334,7 @@ export default function AuthPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold py-3.5 rounded-xl hover:from-blue-500 hover:to-indigo-500 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-blue-600/20 hover:shadow-blue-500/30 disabled:opacity-50 mt-6"
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold py-3.5 rounded-xl hover:from-blue-500 hover:to-indigo-500 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-blue-600/20 hover:shadow-blue-500/30 disabled:opacity-50 mt-5"
               >
                 {isLoading ? (
                   <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
