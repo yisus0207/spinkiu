@@ -24,10 +24,10 @@ const inputClass =
   'w-full bg-slate-950/60 border border-white/10 rounded-xl py-3 pl-11 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-all';
 
 const features = [
-  { icon: Receipt, title: 'Facturación acumulativa', desc: 'Cuentas corrientes y liquidaciones por proveedor.' },
-  { icon: Boxes, title: 'Inventario bajo control', desc: 'Stock y catálogo siempre al día.' },
-  { icon: Camera, title: 'Evidencias con foto', desc: 'Registra entregas con fecha, aun sin señal.' },
-  { icon: WifiOff, title: 'Funciona sin conexión', desc: 'Captura en campo y sincroniza al reconectar.' },
+  { icon: Receipt, title: 'Facturación acumulativa', desc: 'Cuentas corrientes y liquidaciones por proveedor.', chip: 'Facturación' },
+  { icon: Boxes, title: 'Inventario bajo control', desc: 'Stock y catálogo siempre al día.', chip: 'Inventario' },
+  { icon: Camera, title: 'Evidencias con foto', desc: 'Registra entregas con fecha, aun sin señal.', chip: 'Evidencias' },
+  { icon: WifiOff, title: 'Funciona sin conexión', desc: 'Captura en campo y sincroniza al reconectar.', chip: 'Offline' },
 ];
 
 export default function AuthPage() {
@@ -123,7 +123,7 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="fixed inset-0 z-30 overflow-y-auto">
+    <div className="fixed inset-0 z-30 overflow-y-auto overflow-x-hidden">
       <div className="min-h-full w-full lg:grid lg:grid-cols-2">
       {/* ===================== PANEL DE MARCA (izquierda, solo desktop) ===================== */}
       <aside className="relative hidden lg:flex flex-col justify-between p-12 xl:p-16 overflow-hidden bg-gradient-to-br from-blue-950 via-slate-950 to-indigo-950">
@@ -186,18 +186,40 @@ export default function AuthPage() {
       </aside>
 
       {/* ===================== PANEL DEL FORMULARIO (derecha) ===================== */}
-      <main className="relative flex flex-col justify-center items-center px-4 py-12 min-h-screen">
+      <main className="relative flex flex-col justify-center items-center px-4 py-8 min-h-dvh overflow-hidden">
         {/* Orbes suaves detrás del formulario (solo se ven en móvil, donde no hay panel izquierdo) */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/4 w-[26rem] h-[26rem] bg-blue-500/12 rounded-full blur-[120px] pointer-events-none lg:hidden" />
+        <div className="absolute top-0 left-1/3 -translate-x-1/2 -translate-y-1/4 w-[24rem] h-[24rem] bg-blue-500/15 rounded-full blur-[110px] pointer-events-none lg:hidden" />
+        <div className="absolute bottom-0 right-1/4 translate-x-1/3 translate-y-1/4 w-[22rem] h-[22rem] bg-indigo-500/12 rounded-full blur-[120px] pointer-events-none lg:hidden" />
 
         <div className="w-full max-w-md z-10 animate-rise">
           {/* Marca (solo móvil, ya que el panel izquierdo está oculto) */}
-          <div className="flex flex-col items-center mb-8 lg:hidden">
-            <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-xl shadow-blue-600/30 mb-4 ring-1 ring-white/15">
-              <Sparkles size={30} />
+          <div className="lg:hidden mb-7">
+            <div className="flex flex-col items-center text-center">
+              <div className="relative mb-4">
+                <div className="absolute inset-0 bg-blue-500/40 blur-2xl rounded-full" />
+                <div className="relative h-[68px] w-[68px] rounded-[1.35rem] bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-xl shadow-blue-600/40 ring-1 ring-white/20">
+                  <Sparkles size={32} />
+                </div>
+              </div>
+              <h1 className="text-[2.6rem] leading-none font-display font-semibold tracking-tight text-gradient">Spinkiu</h1>
+              <p className="text-sm text-slate-400 mt-2 max-w-[16rem]">Facturación, inventario y evidencias para tu negocio.</p>
             </div>
-            <h1 className="text-4xl font-display font-semibold tracking-tight text-gradient">Spinkiu</h1>
-            <p className="text-sm text-slate-400 mt-1.5">Facturación Acumulativa para Negocios</p>
+
+            {/* Chips de funciones */}
+            <div className="flex flex-wrap justify-center gap-2 mt-5">
+              {features.map((f) => {
+                const Icon = f.icon;
+                return (
+                  <span
+                    key={f.title}
+                    className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-300 bg-white/5 border border-white/10 rounded-full px-3 py-1.5 backdrop-blur"
+                  >
+                    <Icon size={12} className="text-blue-300" />
+                    {f.chip}
+                  </span>
+                );
+              })}
+            </div>
           </div>
 
           {/* Encabezado del formulario (desktop) */}
