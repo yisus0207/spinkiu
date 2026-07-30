@@ -8,6 +8,27 @@ import { Lock } from 'lucide-react';
 
 const isAuthRoute = (p: string) => p === '/' || p === '/login' || p === '/register';
 
+// Lee la sesión de Supabase directamente de localStorage (sin red).
+// Permite saber si el usuario ya está logueado incluso SIN conexión.
+function readStoredSupabaseSession(): any | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith('sb-') || !key.endsWith('-auth-token')) continue;
+      let raw = localStorage.getItem(key);
+      if (!raw) continue;
+      if (raw.startsWith('base64-')) {
+        try { raw = atob(raw.slice(7)); } catch { continue; }
+      }
+      const parsed = JSON.parse(raw);
+      const session = parsed?.currentSession ?? parsed?.session ?? parsed;
+      if (session && (session.user || session.access_token)) return session;
+    }
+  } catch { /* noop */ }
+  return null;
+}
+
 export default function AppInitializer({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -53,42 +74,44 @@ export default function AppInitializer({ children }: { children: React.ReactNode
     return () => document.removeEventListener('wheel', handleWheel);
   }, []);
 
-  // Inicialización de sesión (SOLO al montar). Un único listener, deduplicado y
-  // deferido para evitar el deadlock del cliente de auth de Supabase.
+  // Inicialización de sesión (SOLO al montar).
+  // Clave: NUNCA depender de la red para "estar listo" -> funciona offline.
   useEffect(() => {
     let mounted = true;
-    let lastUid: string | null = null; // dedupe: evita recargar si la sesión no cambió
+    let lastUid = '__init__'; // dedupe: evita recargar datos si la sesión no cambió
 
-    const handleSession = async (session: any) => {
-      const uid = session?.user?.id ?? 'none';
-      if (lastUid === uid) {
-        if (mounted) setIsReady(true);
-        return;
-      }
+    // Aplica el estado de sesión (setSession en 2º plano, NO se espera a la red)
+    const apply = (user: any) => {
+      const uid = user?.id ?? 'none';
+      if (uid === lastUid) return;
       lastUid = uid;
-      try {
-        if (session?.user) {
-          await setSession(session.user);
-          if (mounted && isAuthRoute(pathnameRef.current)) router.push('/dashboard');
-        } else {
-          clearSession();
-          if (mounted && !isAuthRoute(pathnameRef.current)) router.push('/');
-        }
-      } finally {
-        if (mounted) setIsReady(true);
+      if (user) {
+        setSession(user); // sin await: la app queda usable de inmediato
+        if (isAuthRoute(pathnameRef.current)) router.push('/dashboard');
+      } else {
+        clearSession();
+        if (!isAuthRoute(pathnameRef.current)) router.push('/');
       }
     };
 
     if (isSupabaseConfigured && supabase) {
-      // Carga inicial (sesión local, rápida)
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (mounted) handleSession(session);
-      });
+      // 1. Estado inicial LEÍDO DE localStorage (instantáneo, funciona sin conexión)
+      const stored = readStoredSupabaseSession();
+      apply(stored?.user ?? null);
+      setIsReady(true); // listo ya, sin esperar a Supabase
 
-      // Cambios de sesión: DEFERIR con setTimeout para no llamar a Supabase
-      // dentro del callback (evita el deadlock que colgaba la app).
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        setTimeout(() => { if (mounted) handleSession(session); }, 0);
+      // 2. Escuchar cambios reales (login/logout). Deferido para no bloquear el
+      //    cliente de auth. Cuando hay red, confirma/actualiza la sesión.
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        setTimeout(() => {
+          if (!mounted) return;
+          if (event === 'SIGNED_OUT') {
+            apply(null);
+          } else if (session?.user) {
+            apply(session.user);
+          }
+          setIsReady(true);
+        }, 0);
       });
 
       return () => { mounted = false; subscription.unsubscribe(); };
@@ -96,15 +119,13 @@ export default function AppInitializer({ children }: { children: React.ReactNode
       // Modo local (sin Supabase)
       const isLocalLoggedIn = localStorage.getItem('spinkiu_logged_in') === 'true';
       if (isLocalLoggedIn) {
-        setSession({ id: 'local-user-uuid-1234', email: 'demo@spinkiu.com' }).finally(() => {
-          if (mounted) setIsReady(true);
-        });
+        setSession({ id: 'local-user-uuid-1234', email: 'demo@spinkiu.com' });
         if (isAuthRoute(pathnameRef.current)) router.push('/dashboard');
       } else {
         clearSession();
         if (!isAuthRoute(pathnameRef.current)) router.push('/');
-        setIsReady(true);
       }
+      setIsReady(true);
       return () => { mounted = false; };
     }
   }, [router, setSession, clearSession]);

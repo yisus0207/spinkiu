@@ -99,18 +99,36 @@ export const useStore = create<AppState>((set, get) => ({
   setSession: async (sessionUser) => {
     clearBusinessCache(); // recalcular el negocio activo para esta sesión
     set({ user: sessionUser, isLoading: true });
-    try {
-      // Registrar correo del usuario activo si es local para poder calcular sus permisos
-      if (!isSupabaseConfigured) {
-        localStorage.setItem('spinkiu_local_user_mail', sessionUser.email || 'demo@spinkiu.com');
-      }
 
-      await get().fetchProfile();
-      await get().fetchPermissions();
-      await get().fetchClients();
-      await get().fetchInvoices();
-      await get().fetchProducts();
-      await get().fetchEmployees();
+    // Cargar permisos cacheados de inmediato (para que la app funcione offline)
+    try {
+      const cachedPerms = localStorage.getItem('spinkiu_perms');
+      if (cachedPerms) set({ userPermissions: JSON.parse(cachedPerms) });
+    } catch { /* noop */ }
+
+    try {
+      if (!isSupabaseConfigured) {
+        // Modo local (LocalStorage): sin red, siempre disponible
+        localStorage.setItem('spinkiu_local_user_mail', sessionUser.email || 'demo@spinkiu.com');
+        await get().fetchProfile();
+        await get().fetchPermissions();
+        await get().fetchClients();
+        await get().fetchInvoices();
+        await get().fetchProducts();
+        await get().fetchEmployees();
+      } else {
+        // Modo Supabase: solo consultar la red si hay conexión (evita cuelgues offline)
+        const online = typeof navigator === 'undefined' ? true : navigator.onLine;
+        if (online) {
+          await get().fetchProfile();
+          await get().fetchPermissions();
+          await get().fetchClients();
+          await get().fetchInvoices();
+          await get().fetchProducts();
+          await get().fetchEmployees();
+        }
+        // Sin conexión: se usan los permisos cacheados y los datos se cargan al reconectar
+      }
     } catch (err: any) {
       set({ error: err.message || 'Error al inicializar sesión' });
     } finally {
@@ -132,6 +150,7 @@ export const useStore = create<AppState>((set, get) => ({
       userPermissions: ['dashboard', 'clients'],
       error: null
     });
+    try { localStorage.removeItem('spinkiu_perms'); } catch { /* noop */ }
     if (!isSupabaseConfigured) {
       localStorage.removeItem('spinkiu_local_user_mail');
     }
@@ -164,6 +183,7 @@ export const useStore = create<AppState>((set, get) => ({
       const perms = await db.getMyPermissions();
       if (perms) {
         set({ userPermissions: perms });
+        try { localStorage.setItem('spinkiu_perms', JSON.stringify(perms)); } catch { /* noop */ }
       }
     } catch (err: any) {
       console.error('Error al obtener permisos:', err);
