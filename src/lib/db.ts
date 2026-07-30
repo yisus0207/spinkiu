@@ -90,6 +90,18 @@ export interface Invoice {
   items?: InvoiceItem[];
 }
 
+export interface Evidence {
+  id: string;
+  negocio_id: string;
+  cliente_id: string | null; // null = evidencia general (sin proveedor)
+  descripcion: string;
+  foto_url: string; // Portada (primera foto) en Base64 o URL — compatibilidad
+  fotos?: string[]; // Todas las fotos de la evidencia
+  fecha: string; // Fecha/hora en que se tomó la foto
+  created_at: string;
+  _pending?: boolean; // Solo en cliente: pendiente de sincronizar (offline)
+}
+
 // ID por defecto para local
 const LOCAL_USER_ID = 'local-user-uuid-1234';
 
@@ -321,6 +333,22 @@ const getActiveBusinessId = async (): Promise<string> => {
   return LOCAL_USER_ID;
 };
 
+// --- STORAGE DE EVIDENCIAS ---
+const EVIDENCE_BUCKET = 'evidencias';
+
+// ¿El valor ya es una URL/Base64 (mostrable) o es una ruta de Storage (hay que firmarla)?
+const isRemoteOrData = (s: string) => !s || s.startsWith('data:') || s.startsWith('http');
+
+// Convierte un data URL (Base64) a Blob para subirlo a Storage
+const dataUrlToBlob = (dataUrl: string): Blob => {
+  const [header, b64] = dataUrl.split(',');
+  const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
+  const binary = atob(b64 || '');
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+};
+
 export const db = {
   // --- CONFIGURACIÓN DE NEGOCIO / PERFIL ---
   async getProfile(): Promise<BusinessProfile | null> {
@@ -506,7 +534,7 @@ export const db = {
         return employee.permisos;
       }
       // Si es dueño del negocio, tiene acceso total
-      return ['dashboard', 'clients', 'billing', 'inventory', 'settings'];
+      return ['dashboard', 'clients', 'billing', 'inventory', 'evidence', 'settings'];
     } else {
       const isLocalLoggedIn = localStorage.getItem('spinkiu_logged_in') === 'true';
       if (!isLocalLoggedIn) return null;
@@ -514,7 +542,7 @@ export const db = {
       const localUserMail = localStorage.getItem('spinkiu_local_user_mail') || 'demo@spinkiu.com';
       if (localUserMail === 'demo@spinkiu.com') {
         // Acceso total
-        return ['dashboard', 'clients', 'billing', 'inventory', 'settings'];
+        return ['dashboard', 'clients', 'billing', 'inventory', 'evidence', 'settings'];
       }
       
       // Buscar en empleados locales
@@ -1070,6 +1098,125 @@ export const db = {
 
       invoices[index].estado = estado;
       localStorage.setItem('spinkiu_invoices', JSON.stringify(invoices));
+      return true;
+    }
+  },
+
+  // --- EVIDENCIAS (FOTOGRAFÍAS CON FECHA) ---
+  async getEvidence(): Promise<Evidence[]> {
+    const negocioId = await getActiveBusinessId();
+
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('evidence')
+        .select('*')
+        .eq('negocio_id', negocioId)
+        .order('fecha', { ascending: false });
+
+      if (error) throw error;
+      const rows = data || [];
+
+      // Firmar las rutas de Storage (bucket privado) para poder mostrarlas
+      const paths = new Set<string>();
+      for (const r of rows) {
+        const ps: string[] = (r.fotos && r.fotos.length) ? r.fotos : (r.foto_url ? [r.foto_url] : []);
+        ps.forEach((p: string) => { if (p && !isRemoteOrData(p)) paths.add(p); });
+      }
+
+      const urlMap: Record<string, string> = {};
+      if (paths.size > 0) {
+        const { data: signed } = await supabase.storage
+          .from(EVIDENCE_BUCKET)
+          .createSignedUrls(Array.from(paths), 60 * 60 * 8); // 8 horas
+        (signed || []).forEach((s: any) => { if (s?.path && s?.signedUrl) urlMap[s.path] = s.signedUrl; });
+      }
+
+      const resolve = (p: string) => (isRemoteOrData(p) ? p : (urlMap[p] || ''));
+      return rows.map((r: any) => {
+        const ps: string[] = (r.fotos && r.fotos.length) ? r.fotos : (r.foto_url ? [r.foto_url] : []);
+        const resolved = ps.map(resolve).filter(Boolean);
+        return { ...r, foto_url: resolved[0] || '', fotos: resolved };
+      });
+    } else {
+      const json = localStorage.getItem('spinkiu_evidence');
+      const list: Evidence[] = json ? JSON.parse(json) : [];
+      return list
+        .filter(e => e.negocio_id === negocioId)
+        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+    }
+  },
+
+  async createEvidence(data: { cliente_id: string | null; descripcion: string; fotos: string[]; fecha: string }): Promise<Evidence> {
+    const negocioId = await getActiveBusinessId();
+    const fotos = data.fotos && data.fotos.length ? data.fotos : [];
+
+    if (isSupabaseConfigured && supabase) {
+      // 1. Subir cada foto al bucket privado -> guardamos solo la RUTA
+      const uploadedPaths: string[] = [];
+      for (const foto of fotos) {
+        if (foto.startsWith('http')) { uploadedPaths.push(foto); continue; } // ya era una URL
+        const blob = dataUrlToBlob(foto);
+        const path = `${negocioId}/${crypto.randomUUID()}.jpg`;
+        const { error: upErr } = await supabase.storage
+          .from(EVIDENCE_BUCKET)
+          .upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: false });
+        if (upErr) throw upErr;
+        uploadedPaths.push(path);
+      }
+
+      // 2. Insertar la fila con las rutas (NO Base64) -> tabla ligera
+      const row = {
+        negocio_id: negocioId,
+        cliente_id: data.cliente_id,
+        descripcion: data.descripcion,
+        foto_url: uploadedPaths[0] || '',
+        fotos: uploadedPaths,
+        fecha: data.fecha,
+        created_at: new Date().toISOString(),
+      };
+      const { data: inserted, error } = await supabase.from('evidence').insert(row).select().single();
+      if (error) throw error;
+
+      // 3. Devolver con las imágenes originales para mostrarlas de inmediato
+      return { ...inserted, foto_url: fotos[0] || '', fotos };
+    } else {
+      const newEvidence: Evidence = {
+        id: 'ev-' + Math.random().toString(36).substring(2, 11),
+        negocio_id: negocioId,
+        cliente_id: data.cliente_id,
+        descripcion: data.descripcion,
+        foto_url: fotos[0] || '',
+        fotos,
+        fecha: data.fecha,
+        created_at: new Date().toISOString(),
+      };
+      const json = localStorage.getItem('spinkiu_evidence');
+      const list = json ? JSON.parse(json) : [];
+      list.push(newEvidence);
+      localStorage.setItem('spinkiu_evidence', JSON.stringify(list));
+      return newEvidence;
+    }
+  },
+
+  async deleteEvidence(id: string): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      // Eliminar también los archivos del bucket para no dejar huérfanos
+      const { data: row } = await supabase.from('evidence').select('foto_url, fotos').eq('id', id).single();
+      if (row) {
+        const ps: string[] = (row.fotos && row.fotos.length) ? row.fotos : (row.foto_url ? [row.foto_url] : []);
+        const storagePaths = ps.filter((p: string) => p && !isRemoteOrData(p));
+        if (storagePaths.length) {
+          await supabase.storage.from(EVIDENCE_BUCKET).remove(storagePaths);
+        }
+      }
+      const { error } = await supabase.from('evidence').delete().eq('id', id);
+      if (error) throw error;
+      return true;
+    } else {
+      const json = localStorage.getItem('spinkiu_evidence');
+      let list: Evidence[] = json ? JSON.parse(json) : [];
+      list = list.filter(e => e.id !== id);
+      localStorage.setItem('spinkiu_evidence', JSON.stringify(list));
       return true;
     }
   }

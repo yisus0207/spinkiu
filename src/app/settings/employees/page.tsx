@@ -82,6 +82,7 @@ export default function EmployeesPage() {
     { id: 'clients', name: 'Gestión de Clientes' },
     { id: 'billing', name: 'Facturación y Cuenta Corriente' },
     { id: 'inventory', name: 'Control de Inventario' },
+    { id: 'evidence', name: 'Evidencias (Fotos)' },
     { id: 'settings', name: 'Ajustes de Negocio' },
   ];
 

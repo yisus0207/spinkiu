@@ -12,6 +12,24 @@ export default function AppInitializer({ children }: { children: React.ReactNode
   const { setSession, clearSession, user, userPermissions } = useStore();
   const [isReady, setIsReady] = useState(false);
 
+  // Service Worker (offline) + sincronización de evidencias pendientes al reconectar
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Registrar el service worker solo en producción (evita interferir con HMR en dev)
+    if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+
+    // Intentar sincronizar evidencias guardadas offline
+    const sync = () => {
+      useStore.getState().syncPendingEvidence();
+    };
+    sync();
+    window.addEventListener('online', sync);
+    return () => window.removeEventListener('online', sync);
+  }, []);
+
   // Evitar que la rueda del mouse cambie el valor de los campos numéricos.
   // El número solo se debe modificar escribiendo o borrando.
   useEffect(() => {
@@ -95,6 +113,7 @@ export default function AppInitializer({ children }: { children: React.ReactNode
     if (path.startsWith('/providers')) return 'clients';
     if (path.startsWith('/billing')) return 'billing';
     if (path.startsWith('/inventory')) return 'inventory';
+    if (path.startsWith('/evidence')) return 'evidence';
     if (path.startsWith('/settings')) return 'settings';
     return null;
   };
@@ -132,7 +151,7 @@ export default function AppInitializer({ children }: { children: React.ReactNode
           </div>
           <button
             onClick={() => {
-              const firstAllowed = ['dashboard', 'clients', 'billing', 'inventory', 'settings'].find(p => userPermissions.includes(p));
+              const firstAllowed = ['dashboard', 'clients', 'billing', 'inventory', 'evidence', 'settings'].find(p => userPermissions.includes(p));
               if (firstAllowed) {
                 router.push(`/${firstAllowed}`);
               } else {

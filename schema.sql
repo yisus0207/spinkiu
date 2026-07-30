@@ -252,3 +252,85 @@ CREATE POLICY "Permitir gestión de API keys al dueño del negocio" ON public.ap
 CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON public.api_keys(key_hash);
 CREATE INDEX IF NOT EXISTS idx_api_keys_negocio ON public.api_keys(negocio_id);
 
+
+-- 10. TABLA DE EVIDENCIAS (FOTOGRAFÍAS CON FECHA)
+CREATE TABLE IF NOT EXISTS public.evidence (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    negocio_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    cliente_id UUID REFERENCES public.clients(id) ON DELETE SET NULL, -- NULL = evidencia general
+    descripcion TEXT DEFAULT '',
+    foto_url TEXT NOT NULL, -- Portada (primera foto) en Base64 o URL
+    fotos JSONB NOT NULL DEFAULT '[]'::jsonb, -- Todas las fotos de la evidencia
+    fecha TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL, -- Fecha/hora de la foto
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Habilitar RLS
+ALTER TABLE public.evidence ENABLE ROW LEVEL SECURITY;
+
+-- Políticas de RLS para evidence (dueño y empleados autorizados del negocio)
+CREATE POLICY "Permitir todas las acciones de evidencias para el negocio" ON public.evidence
+    FOR ALL USING (
+        auth.uid() = negocio_id OR
+        EXISTS (SELECT 1 FROM public.employees WHERE id = auth.uid() AND employees.negocio_id = evidence.negocio_id)
+    ) WITH CHECK (
+        auth.uid() = negocio_id OR
+        EXISTS (SELECT 1 FROM public.employees WHERE id = auth.uid() AND employees.negocio_id = evidence.negocio_id)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_evidence_negocio ON public.evidence(negocio_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_cliente ON public.evidence(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_fecha ON public.evidence(fecha);
+
+
+-- 11. STORAGE: BUCKET PRIVADO PARA LAS FOTOS DE EVIDENCIAS
+-- Las fotos NO se guardan en la tabla (Base64), sino como archivos en este bucket.
+-- La tabla evidence solo guarda la RUTA del archivo (ej. "<negocio_id>/<uuid>.jpg").
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('evidencias', 'evidencias', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- Políticas de acceso al bucket: cada negocio solo ve/gestiona su propia carpeta.
+-- La ruta empieza con el negocio_id, así que folder[1] = negocio_id.
+DROP POLICY IF EXISTS "Evidencias Storage: ver" ON storage.objects;
+CREATE POLICY "Evidencias Storage: ver" ON storage.objects
+    FOR SELECT TO authenticated USING (
+        bucket_id = 'evidencias' AND (
+            (storage.foldername(name))[1] = auth.uid()::text
+            OR EXISTS (SELECT 1 FROM public.employees WHERE id = auth.uid() AND employees.negocio_id::text = (storage.foldername(name))[1])
+        )
+    );
+
+DROP POLICY IF EXISTS "Evidencias Storage: subir" ON storage.objects;
+CREATE POLICY "Evidencias Storage: subir" ON storage.objects
+    FOR INSERT TO authenticated WITH CHECK (
+        bucket_id = 'evidencias' AND (
+            (storage.foldername(name))[1] = auth.uid()::text
+            OR EXISTS (SELECT 1 FROM public.employees WHERE id = auth.uid() AND employees.negocio_id::text = (storage.foldername(name))[1])
+        )
+    );
+
+DROP POLICY IF EXISTS "Evidencias Storage: eliminar" ON storage.objects;
+CREATE POLICY "Evidencias Storage: eliminar" ON storage.objects
+    FOR DELETE TO authenticated USING (
+        bucket_id = 'evidencias' AND (
+            (storage.foldername(name))[1] = auth.uid()::text
+            OR EXISTS (SELECT 1 FROM public.employees WHERE id = auth.uid() AND employees.negocio_id::text = (storage.foldername(name))[1])
+        )
+    );
+
+
+-- ==========================================
+-- MIGRACIONES / ACTUALIZACIONES (idempotentes)
+-- Ejecuta esta sección si tu base de datos YA existía antes de estos cambios.
+-- En una base de datos NUEVA no hacen nada (las columnas ya se crean arriba).
+-- ==========================================
+
+-- Fecha por concepto en los ítems de factura
+ALTER TABLE public.invoice_items
+    ADD COLUMN IF NOT EXISTS fecha TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+
+-- Soporte de múltiples fotos por evidencia
+ALTER TABLE public.evidence
+    ADD COLUMN IF NOT EXISTS fotos JSONB NOT NULL DEFAULT '[]'::jsonb;
+

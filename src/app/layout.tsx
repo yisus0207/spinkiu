@@ -1,14 +1,22 @@
 import type { Metadata, Viewport } from "next";
-import { Outfit } from "next/font/google";
+import { Inter, Fraunces } from "next/font/google";
 import "./globals.css";
 import AppInitializer from "@/components/AppInitializer";
 import Navigation from "@/components/Navigation";
 import Header from "@/components/Header";
 
-const fontOutfit = Outfit({
-  variable: "--font-outfit",
+const fontInter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700", "800"],
+});
+
+// Serif display de alto contraste para marca y títulos (look boutique/premium)
+const fontDisplay = Fraunces({
+  variable: "--font-display",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  style: ["normal", "italic"],
 });
 
 export const metadata: Metadata = {
@@ -23,7 +31,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#09090b",
+  themeColor: "#020617",
 };
 
 export default function RootLayout({
@@ -32,8 +40,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className={`${fontOutfit.variable} h-full antialiased dark`} suppressHydrationWarning>
-      <body className="min-h-full flex flex-col bg-zinc-950 font-sans text-zinc-100 antialiased selection:bg-blue-600/30" suppressHydrationWarning>
+    <html lang="es" className={`${fontInter.variable} ${fontDisplay.variable} h-full antialiased dark`} suppressHydrationWarning>
+      <body className="min-h-full flex flex-col font-sans text-slate-100 antialiased selection:bg-blue-500/30 selection:text-white" suppressHydrationWarning>
+        {/* Fondo ambiental cinematográfico detrás de toda la app */}
+        <div className="ambient-bg" aria-hidden="true" />
         <AppInitializer>
           <div className="flex-1 flex flex-col md:flex-row">
             <Navigation />

@@ -1,102 +1,238 @@
 @import "tailwindcss";
 
+/* ==========================================================================
+   SPINKIU — Sistema de diseño "Modern Dark / Cinematic"
+   Paleta slate profunda + acento azul/índigo + verde para valores positivos.
+   ========================================================================== */
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-display), var(--font-inter), Georgia, serif;
+
+  --color-brand-50: #eff6ff;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+}
+
 :root {
-  --background: #09090b;
-  --foreground: #fafafa;
-  --card: #18181b;
-  --card-foreground: #fafafa;
-  --popover: #09090b;
-  --popover-foreground: #fafafa;
-  --primary: #3b82f6;
-  --primary-foreground: #ffffff;
-  --secondary: #27272a;
-  --secondary-foreground: #fafafa;
-  --muted: #27272a;
-  --muted-foreground: #a1a1aa;
-  --accent: #27272a;
-  --accent-foreground: #fafafa;
+  --background: #020617;
+  --foreground: #f8fafc;
+
+  --surface: rgba(15, 23, 42, 0.6);
+  --surface-solid: #0b1220;
+  --border-soft: rgba(148, 163, 184, 0.12);
+  --border-strong: rgba(148, 163, 184, 0.22);
+
+  --accent: #3b82f6;
+  --accent-indigo: #6366f1;
+  --positive: #22c55e;
   --destructive: #ef4444;
-  --destructive-foreground: #fafafa;
-  --border: #27272a;
-  --input: #27272a;
-  --ring: #2563eb;
-  
-  --radius-lg: 1rem;
-  --radius-md: 0.75rem;
-  --radius-sm: 0.5rem;
-  
-  --shadow-premium: 0 4px 30px rgba(0, 0, 0, 0.4);
-  --glass-bg: rgba(24, 24, 27, 0.75);
+
+  --radius-lg: 1.25rem;
+  --radius-md: 0.85rem;
+  --radius-sm: 0.55rem;
+
+  --shadow-premium: 0 10px 40px -12px rgba(0, 0, 0, 0.6), 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+  --glass-bg: rgba(15, 23, 42, 0.55);
   --glass-border: rgba(255, 255, 255, 0.08);
+}
+
+html {
+  background-color: var(--background);
+  color-scheme: dark; /* Controles nativos (select, date, scrollbars) en modo oscuro */
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Custom Scrollbar for sleek UI */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* --------------------------------------------------------------------------
+   FONDO AMBIENTAL CINEMATOGRÁFICO (glows suaves detrás de toda la app)
+   -------------------------------------------------------------------------- */
+.ambient-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 40rem at 15% -10%, rgba(59, 130, 246, 0.14), transparent 60%),
+    radial-gradient(50rem 40rem at 100% 0%, rgba(99, 102, 241, 0.12), transparent 55%),
+    radial-gradient(45rem 40rem at 50% 120%, rgba(34, 197, 94, 0.07), transparent 55%),
+    var(--background);
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
+/* Rejilla sutil sobre el fondo, aporta textura "producto premium" */
+.ambient-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
 }
 
+/* --------------------------------------------------------------------------
+   SCROLLBAR
+   -------------------------------------------------------------------------- */
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: rgba(148, 163, 184, 0.22);
   border-radius: 9999px;
 }
+::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.4); }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
-}
-
-/* Glassmorphism utility classes */
+/* --------------------------------------------------------------------------
+   GLASSMORPHISM & TARJETAS PREMIUM
+   -------------------------------------------------------------------------- */
 .glass-panel {
-  background: var(--glass-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--glass-border);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.72), rgba(2, 6, 23, 0.62));
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border-color: var(--border-soft);
 }
 
 .glass-card {
-  background: rgba(24, 24, 27, 0.4);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border);
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(30, 41, 59, 0.5), rgba(15, 23, 42, 0.35));
+  backdrop-filter: blur(14px) saturate(130%);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+  border: 1px solid var(--border-soft);
   box-shadow: var(--shadow-premium);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.3s ease,
+              box-shadow 0.3s ease;
+}
+
+/* Highlight superior tipo "vidrio" */
+.glass-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
 .glass-card:hover {
-  border-color: rgba(255, 255, 255, 0.15);
-  transform: translateY(-2px);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  border-color: var(--border-strong);
+  transform: translateY(-3px);
+  box-shadow: 0 18px 50px -14px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(59, 130, 246, 0.08);
 }
 
-/* Animation utilities */
-.tap-highlight-none {
-  -webkit-tap-highlight-color: transparent;
+/* Tarjeta destacada con borde/acento de color (usar en KPIs, CTAs) */
+.card-accent {
+  position: relative;
+  overflow: hidden;
+}
+.card-accent::after {
+  content: "";
+  position: absolute;
+  top: -40%;
+  right: -20%;
+  width: 12rem;
+  height: 12rem;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.18), transparent 70%);
+  pointer-events: none;
 }
 
-/* Ocultar las flechas (spinner) de los campos numéricos: solo permitir escribir */
+/* --------------------------------------------------------------------------
+   UTILIDADES DE MARCA
+   -------------------------------------------------------------------------- */
+.text-gradient {
+  background: linear-gradient(135deg, #60a5fa 0%, #a5b4fc 45%, #f8fafc 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.glow-blue { box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25), 0 8px 30px -6px rgba(59, 130, 246, 0.4); }
+.glow-emerald { box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.25), 0 8px 30px -6px rgba(34, 197, 94, 0.35); }
+
+.hairline { border-color: var(--border-soft); }
+
+/* --------------------------------------------------------------------------
+   ANIMACIONES DE ENTRADA
+   -------------------------------------------------------------------------- */
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes floatSlow {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(20px, -20px); }
+}
+
+.animate-rise {
+  animation: riseIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Retrasos escalonados para grillas (stagger) */
+.stagger > * { animation: riseIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.stagger > *:nth-child(1) { animation-delay: 0.03s; }
+.stagger > *:nth-child(2) { animation-delay: 0.09s; }
+.stagger > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger > *:nth-child(4) { animation-delay: 0.21s; }
+.stagger > *:nth-child(5) { animation-delay: 0.27s; }
+.stagger > *:nth-child(6) { animation-delay: 0.33s; }
+
+.tap-highlight-none { -webkit-tap-highlight-color: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise, .stagger > * { animation: none !important; }
+  * { scroll-behavior: auto !important; }
+}
+
+/* --------------------------------------------------------------------------
+   SELECT: menú desplegable nativo en modo oscuro (consistente con el tema)
+   -------------------------------------------------------------------------- */
+select {
+  color-scheme: dark;
+}
+select option {
+  background-color: #0f172a; /* slate-900 */
+  color: #f1f5f9;            /* slate-100 */
+}
+select option:checked {
+  background-color: #1d4ed8; /* blue-700 */
+  color: #ffffff;
+}
+
+/* --------------------------------------------------------------------------
+   CAMPOS NUMÉRICOS: sin flechas spinner (solo escribir)
+   -------------------------------------------------------------------------- */
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
-
 input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
 
-/* Print CSS for Thermal Ticket optimization */
+/* --------------------------------------------------------------------------
+   IMPRESIÓN TÉRMICA
+   -------------------------------------------------------------------------- */
 @media print {
   body {
     background: #ffffff !important;
@@ -105,22 +241,16 @@ input[type="number"] {
     padding: 0 !important;
     margin: 0 !important;
   }
-
-  /* Ocultar barra de navegación, cabeceras, botones, etc. */
-  .no-print {
-    display: none !important;
-  }
-
+  .ambient-bg { display: none !important; }
+  .no-print { display: none !important; }
   .print-area {
     display: block !important;
     width: 100% !important;
-    max-width: 80mm !important; /* Compatible con ancho térmico de 80mm y 58mm */
+    max-width: 80mm !important;
     margin: 0 auto !important;
     padding: 5mm !important;
     box-sizing: border-box !important;
   }
-
-  /* Forzar colores de texto en impresión */
   * {
     color-adjust: exact !important;
     -webkit-print-color-adjust: exact !important;

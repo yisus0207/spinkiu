@@ -1,0 +1,19 @@
+{
+  "name": "Spinkiu - Facturación Acumulativa",
+  "short_name": "Spinkiu",
+  "description": "Plataforma para gestión de proveedores, cuentas corrientes, facturación acumulativa e inventario.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "/globe.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

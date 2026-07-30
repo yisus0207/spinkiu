@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { db, BusinessProfile, Client, Charge, Invoice, Product, Employee } from '@/lib/db';
+import { db, BusinessProfile, Client, Charge, Invoice, Product, Employee, Evidence } from '@/lib/db';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 interface AppState {
@@ -10,6 +10,7 @@ interface AppState {
   invoices: Invoice[];
   products: Product[];
   employees: Employee[];
+  evidence: Evidence[];
   userPermissions: string[]; // Módulos a los que se tiene acceso
   isLoading: boolean;
   error: string | null;
@@ -58,7 +59,28 @@ interface AppState {
   inviteEmployee: (nombre: string, email: string, permisos: string[]) => Promise<void>;
   updateEmployee: (id: string, updates: Partial<Pick<Employee, 'nombre' | 'email' | 'permisos' | 'activo'>>) => Promise<void>;
   deleteEmployee: (id: string) => Promise<void>;
+
+  // Acciones de Evidencias
+  fetchEvidence: () => Promise<void>;
+  addEvidence: (data: { cliente_id: string | null; descripcion: string; fotos: string[]; fecha: string }) => Promise<void>;
+  deleteEvidence: (id: string) => Promise<void>;
+  syncPendingEvidence: () => Promise<void>;
 }
+
+// --- Cola de evidencias pendientes (captura offline) ---
+const PENDING_EVIDENCE_KEY = 'spinkiu_evidence_pending';
+const readPendingEvidence = (): any[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    return JSON.parse(localStorage.getItem(PENDING_EVIDENCE_KEY) || '[]');
+  } catch {
+    return [];
+  }
+};
+const writePendingEvidence = (list: any[]) => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(PENDING_EVIDENCE_KEY, JSON.stringify(list));
+};
 
 export const useStore = create<AppState>((set, get) => ({
   user: null,
@@ -68,6 +90,7 @@ export const useStore = create<AppState>((set, get) => ({
   invoices: [],
   products: [],
   employees: [],
+  evidence: [],
   userPermissions: ['dashboard', 'clients'], // Permisos por defecto
   isLoading: false,
   error: null,
@@ -103,6 +126,7 @@ export const useStore = create<AppState>((set, get) => ({
       invoices: [],
       products: [],
       employees: [],
+      evidence: [],
       userPermissions: ['dashboard', 'clients'],
       error: null
     });
@@ -447,6 +471,108 @@ export const useStore = create<AppState>((set, get) => ({
     } finally {
       set({ isLoading: false });
     }
+  },
+
+  // --- EVIDENCIAS ---
+  fetchEvidence: async () => {
+    const pending = readPendingEvidence().map((p) => ({ ...p, _pending: true }));
+    try {
+      const list = await db.getEvidence();
+      set({ evidence: [...pending, ...list] });
+    } catch (err: any) {
+      // Sin conexión: al menos mostrar las pendientes locales
+      set({ evidence: pending });
+      set({ error: err.message || 'Error al obtener evidencias' });
+    }
+  },
+
+  addEvidence: async (data) => {
+    const online = typeof navigator === 'undefined' ? true : navigator.onLine;
+    const optimistic: Evidence = {
+      id: 'pending-' + Math.random().toString(36).substring(2, 11),
+      negocio_id: '',
+      cliente_id: data.cliente_id,
+      descripcion: data.descripcion,
+      foto_url: data.fotos[0] || '',
+      fotos: data.fotos,
+      fecha: data.fecha,
+      created_at: new Date().toISOString(),
+      _pending: true,
+    };
+
+    // Modo Supabase sin conexión → encolar y mostrar de inmediato
+    if (isSupabaseConfigured && !online) {
+      const q = readPendingEvidence();
+      q.push(optimistic);
+      writePendingEvidence(q);
+      set((state) => ({ evidence: [optimistic, ...state.evidence] }));
+      return;
+    }
+
+    set({ isLoading: true });
+    try {
+      const newEvidence = await db.createEvidence(data);
+      set((state) => ({ evidence: [newEvidence, ...state.evidence] }));
+    } catch (err: any) {
+      if (isSupabaseConfigured) {
+        // Falló la red → encolar en lugar de perder la evidencia
+        const q = readPendingEvidence();
+        q.push(optimistic);
+        writePendingEvidence(q);
+        set((state) => ({ evidence: [optimistic, ...state.evidence] }));
+      } else {
+        set({ error: err.message || 'Error al guardar la evidencia' });
+        throw err;
+      }
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  deleteEvidence: async (id) => {
+    // Si es una evidencia pendiente (aún no sincronizada), quitarla de la cola
+    if (id.startsWith('pending-')) {
+      const q = readPendingEvidence().filter((p) => p.id !== id);
+      writePendingEvidence(q);
+      set((state) => ({ evidence: state.evidence.filter(e => e.id !== id) }));
+      return;
+    }
+    set({ isLoading: true });
+    try {
+      await db.deleteEvidence(id);
+      set((state) => ({
+        evidence: state.evidence.filter(e => e.id !== id)
+      }));
+    } catch (err: any) {
+      set({ error: err.message || 'Error al eliminar la evidencia' });
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  syncPendingEvidence: async () => {
+    if (!isSupabaseConfigured) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    const q = readPendingEvidence();
+    if (q.length === 0) return;
+
+    const remaining: any[] = [];
+    for (const p of q) {
+      try {
+        const created = await db.createEvidence({
+          cliente_id: p.cliente_id,
+          descripcion: p.descripcion,
+          fotos: p.fotos && p.fotos.length ? p.fotos : (p.foto_url ? [p.foto_url] : []),
+          fecha: p.fecha,
+        });
+        // Reemplazar la versión pendiente por la ya sincronizada
+        set((state) => ({ evidence: state.evidence.map(e => e.id === p.id ? created : e) }));
+      } catch {
+        remaining.push(p); // sigue pendiente para el próximo intento
+      }
+    }
+    writePendingEvidence(remaining);
   }
 }));
 

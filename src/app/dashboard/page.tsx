@@ -104,6 +104,7 @@ export default function Dashboard() {
       sub: 'Productores registrados',
       icon: Users,
       color: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
+      accent: 'text-slate-50',
       href: '/providers'
     },
     {
@@ -111,7 +112,8 @@ export default function Dashboard() {
       value: totalInvoices,
       sub: 'Historial total de cuentas',
       icon: Receipt,
-      color: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
+      color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20',
+      accent: 'text-slate-50',
       href: '/providers'
     },
     {
@@ -120,6 +122,7 @@ export default function Dashboard() {
       sub: 'Liquidaciones por pagar',
       icon: Clock,
       color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+      accent: 'text-amber-300',
       href: '/providers'
     },
     {
@@ -128,6 +131,7 @@ export default function Dashboard() {
       sub: 'Saldo neto por liquidar',
       icon: DollarSign,
       color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+      accent: 'text-emerald-400',
       href: '/providers'
     }
   ];
@@ -142,17 +146,33 @@ export default function Dashboard() {
 
   return (
     <div className="flex-1 p-4 md:p-8 max-w-5xl mx-auto w-full space-y-6">
-      
-      {/* Cabecera del Dashboard */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <span className="text-xs font-bold text-blue-500 uppercase tracking-widest">Panel de Control</span>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-zinc-100 tracking-tight mt-1">
-            {profile?.nombre_negocio || 'Mi Negocio'}
-          </h1>
-          <p className="text-sm text-zinc-400 mt-0.5">Resumen de cuenta corriente y control de acopio de leche/queso</p>
+
+      {/* HERO / Cabecera del Dashboard */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        className="glass-card card-accent rounded-3xl p-6 md:p-8 relative overflow-hidden"
+      >
+        <div className="relative z-10 flex flex-col md:flex-row md:items-end md:justify-between gap-5">
+          <div>
+            <span className="text-[11px] font-bold text-blue-400 uppercase tracking-[0.22em]">Panel de Control</span>
+            <h1 className="text-3xl md:text-4xl font-display font-semibold text-slate-50 tracking-tight mt-2 leading-none">
+              {profile?.nombre_negocio || 'Mi Negocio'}
+            </h1>
+            <p className="text-sm text-slate-400 mt-2 max-w-md">Resumen de cuenta corriente y control de acopio de leche y queso.</p>
+          </div>
+
+          {/* Destacado: saldo pendiente total */}
+          <div className="shrink-0 rounded-2xl bg-slate-950/40 border border-white/10 px-5 py-4 backdrop-blur">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Saldo por Liquidar</span>
+            <span className="text-2xl md:text-3xl font-bold tracking-tight text-emerald-400 block mt-1">
+              {formatCOP(totalUnpaidAmount)}
+            </span>
+            <span className="text-[10px] text-slate-500">{totalPendingInvoices} cuenta{totalPendingInvoices === 1 ? '' : 's'} pendiente{totalPendingInvoices === 1 ? '' : 's'}</span>
+          </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Grid de Tarjetas KPIs con animación Framer Motion */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
@@ -163,23 +183,23 @@ export default function Dashboard() {
               key={kpi.title}
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: idx * 0.05 }}
-              className="glass-card rounded-2xl p-4 flex flex-col justify-between min-h-[120px] relative overflow-hidden group cursor-pointer"
+              transition={{ duration: 0.4, delay: idx * 0.06, ease: [0.16, 1, 0.3, 1] }}
+              className="glass-card rounded-2xl p-4 md:p-5 flex flex-col justify-between min-h-[130px] relative overflow-hidden group cursor-pointer"
               onClick={() => window.location.href = kpi.href}
             >
-              <div className="flex justify-between items-start">
-                <span className="text-xs font-semibold text-zinc-400 group-hover:text-zinc-300 transition-colors">
+              <div className="flex justify-between items-start gap-2">
+                <span className="text-[11px] font-semibold text-slate-400 group-hover:text-slate-300 transition-colors leading-tight">
                   {kpi.title}
                 </span>
-                <div className={`h-8 w-8 rounded-xl flex items-center justify-center border ${kpi.color}`}>
+                <div className={`h-9 w-9 rounded-xl flex items-center justify-center border shrink-0 ${kpi.color}`}>
                   <Icon size={16} />
                 </div>
               </div>
               <div className="mt-4">
-                <span className="text-xl md:text-2xl font-bold tracking-tight text-zinc-100">
+                <span className={`text-2xl md:text-[28px] font-bold tracking-tight leading-none ${kpi.accent || 'text-slate-50'}`}>
                   {kpi.value}
                 </span>
-                <p className="text-[10px] text-zinc-500 mt-0.5 truncate">{kpi.sub}</p>
+                <p className="text-[10px] text-slate-500 mt-1.5 truncate">{kpi.sub}</p>
               </div>
             </motion.div>
           );
