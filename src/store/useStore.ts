@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { db, clearBusinessCache, BusinessProfile, Client, Charge, Invoice, Product, Employee, Evidence } from '@/lib/db';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { getAllPendingEvidence, putPendingEvidence, deletePendingEvidence } from '@/lib/pendingEvidence';
 
 interface AppState {
   user: any | null;
@@ -66,21 +67,6 @@ interface AppState {
   deleteEvidence: (id: string) => Promise<void>;
   syncPendingEvidence: () => Promise<void>;
 }
-
-// --- Cola de evidencias pendientes (captura offline) ---
-const PENDING_EVIDENCE_KEY = 'spinkiu_evidence_pending';
-const readPendingEvidence = (): any[] => {
-  if (typeof window === 'undefined') return [];
-  try {
-    return JSON.parse(localStorage.getItem(PENDING_EVIDENCE_KEY) || '[]');
-  } catch {
-    return [];
-  }
-};
-const writePendingEvidence = (list: any[]) => {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(PENDING_EVIDENCE_KEY, JSON.stringify(list));
-};
 
 export const useStore = create<AppState>((set, get) => ({
   user: null,
@@ -497,7 +483,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   // --- EVIDENCIAS ---
   fetchEvidence: async () => {
-    const pending = readPendingEvidence().map((p) => ({ ...p, _pending: true }));
+    const pending = (await getAllPendingEvidence()).map((p) => ({ ...p, _pending: true }));
     try {
       const list = await db.getEvidence();
       set({ evidence: [...pending, ...list] });
@@ -522,11 +508,9 @@ export const useStore = create<AppState>((set, get) => ({
       _pending: true,
     };
 
-    // Modo Supabase sin conexión → encolar y mostrar de inmediato
+    // Modo Supabase sin conexión → encolar (IndexedDB) y mostrar de inmediato
     if (isSupabaseConfigured && !online) {
-      const q = readPendingEvidence();
-      q.push(optimistic);
-      writePendingEvidence(q);
+      await putPendingEvidence(optimistic);
       set((state) => ({ evidence: [optimistic, ...state.evidence] }));
       return;
     }
@@ -537,10 +521,8 @@ export const useStore = create<AppState>((set, get) => ({
       set((state) => ({ evidence: [newEvidence, ...state.evidence] }));
     } catch (err: any) {
       if (isSupabaseConfigured) {
-        // Falló la red → encolar en lugar de perder la evidencia
-        const q = readPendingEvidence();
-        q.push(optimistic);
-        writePendingEvidence(q);
+        // Falló la red → encolar en IndexedDB en lugar de perder la evidencia
+        await putPendingEvidence(optimistic);
         set((state) => ({ evidence: [optimistic, ...state.evidence] }));
       } else {
         set({ error: err.message || 'Error al guardar la evidencia' });
@@ -554,8 +536,7 @@ export const useStore = create<AppState>((set, get) => ({
   deleteEvidence: async (id) => {
     // Si es una evidencia pendiente (aún no sincronizada), quitarla de la cola
     if (id.startsWith('pending-')) {
-      const q = readPendingEvidence().filter((p) => p.id !== id);
-      writePendingEvidence(q);
+      await deletePendingEvidence(id);
       set((state) => ({ evidence: state.evidence.filter(e => e.id !== id) }));
       return;
     }
@@ -576,10 +557,9 @@ export const useStore = create<AppState>((set, get) => ({
   syncPendingEvidence: async () => {
     if (!isSupabaseConfigured) return;
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    const q = readPendingEvidence();
+    const q = await getAllPendingEvidence();
     if (q.length === 0) return;
 
-    const remaining: any[] = [];
     for (const p of q) {
       try {
         const created = await db.createEvidence({
@@ -588,13 +568,13 @@ export const useStore = create<AppState>((set, get) => ({
           fotos: p.fotos && p.fotos.length ? p.fotos : (p.foto_url ? [p.foto_url] : []),
           fecha: p.fecha,
         });
+        await deletePendingEvidence(p.id);
         // Reemplazar la versión pendiente por la ya sincronizada
         set((state) => ({ evidence: state.evidence.map(e => e.id === p.id ? created : e) }));
       } catch {
-        remaining.push(p); // sigue pendiente para el próximo intento
+        /* sigue pendiente para el próximo intento */
       }
     }
-    writePendingEvidence(remaining);
   }
 }));
 
