@@ -123,7 +123,10 @@ export default function EvidencePage() {
         return;
       }
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 2560 }, height: { ideal: 1440 } },
+          audio: false,
+        });
         if (!active) { stream.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
@@ -158,36 +161,32 @@ export default function EvidencePage() {
     setCapturedAt(null);
   };
 
-  const compressToDataUrl = (source: CanvasImageSource, srcW: number, srcH: number) => {
-    const MAX = 1280;
-    let w = srcW, h = srcH;
-    if (w > MAX) { h = h * (MAX / w); w = MAX; }
-    const canvas = document.createElement('canvas');
-    canvas.width = w; canvas.height = h;
-    canvas.getContext('2d')?.drawImage(source, 0, 0, w, h);
-    return canvas.toDataURL('image/jpeg', 0.6);
-  };
-
+  // Captura de la cámara a la máxima resolución disponible del video (alta calidad)
   const capturePhoto = () => {
     const video = videoRef.current;
     if (!video || !video.videoWidth) return;
-    const dataUrl = compressToDataUrl(video, video.videoWidth, video.videoHeight);
+    const MAX = 3000; // tope de seguridad para no generar imágenes descomunales
+    let w = video.videoWidth;
+    let h = video.videoHeight;
+    if (w > MAX) { h = h * (MAX / w); w = MAX; }
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext('2d')?.drawImage(video, 0, 0, w, h);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.95); // calidad alta
     setCaptured((prev) => [...prev, dataUrl]);
     if (!capturedAt) setCapturedAt(new Date().toISOString());
   };
 
+  // Archivos de galería: se suben en su calidad ORIGINAL (sin recomprimir)
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     files.forEach((file) => {
       const reader = new FileReader();
       reader.onload = (ev) => {
-        const img = new Image();
-        img.onload = () => {
-          const dataUrl = compressToDataUrl(img, img.width, img.height);
-          setCaptured((prev) => [...prev, dataUrl]);
-          setCapturedAt((prev) => prev || new Date().toISOString());
-        };
-        img.src = ev.target?.result as string;
+        const dataUrl = ev.target?.result as string;
+        setCaptured((prev) => [...prev, dataUrl]);
+        setCapturedAt((prev) => prev || new Date().toISOString());
       };
       reader.readAsDataURL(file);
     });

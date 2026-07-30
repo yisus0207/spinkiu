@@ -1174,7 +1174,8 @@ export const db = {
       for (const foto of fotos) {
         if (foto.startsWith('http')) { uploadedPaths.push(foto); continue; } // ya era una URL
         const blob = dataUrlToBlob(foto);
-        const path = `${negocioId}/${crypto.randomUUID()}.jpg`;
+        const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+        const path = `${negocioId}/${crypto.randomUUID()}.${ext}`;
         const { error: upErr } = await supabase.storage
           .from(EVIDENCE_BUCKET)
           .upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: false });
