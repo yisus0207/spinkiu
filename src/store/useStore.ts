@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { db, BusinessProfile, Client, Charge, Invoice, Product, Employee, Evidence } from '@/lib/db';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { db, clearBusinessCache, BusinessProfile, Client, Charge, Invoice, Product, Employee, Evidence } from '@/lib/db';
+import { isSupabaseConfigured } from '@/lib/supabase';
 
 interface AppState {
   user: any | null;
@@ -97,6 +97,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   // --- AUTENTICACIÓN & SESIÓN ---
   setSession: async (sessionUser) => {
+    clearBusinessCache(); // recalcular el negocio activo para esta sesión
     set({ user: sessionUser, isLoading: true });
     try {
       // Registrar correo del usuario activo si es local para poder calcular sus permisos
@@ -118,6 +119,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   clearSession: () => {
+    clearBusinessCache();
     set({
       user: null,
       profile: null,
@@ -576,13 +578,5 @@ export const useStore = create<AppState>((set, get) => ({
   }
 }));
 
-// Escuchador de autenticación de Supabase automático
-if (isSupabaseConfigured && supabase) {
-  supabase.auth.onAuthStateChange(async (event, session) => {
-    if (session?.user) {
-      await useStore.getState().setSession(session.user);
-    } else {
-      useStore.getState().clearSession();
-    }
-  });
-}
+// Nota: el listener de autenticación se maneja en un solo lugar (AppInitializer),
+// de forma deferida, para evitar el deadlock del cliente de auth de Supabase.

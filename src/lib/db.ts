@@ -315,20 +315,29 @@ const initializeLocalData = () => {
   }
 };
 
+// Cache del negocio activo para no repetir consultas en cada operación
+let cachedBusinessId: string | null = null;
+export const clearBusinessCache = () => { cachedBusinessId = null; };
+
 const getActiveBusinessId = async (): Promise<string> => {
   if (isSupabaseConfigured && supabase) {
-    const { data: { user } } = await supabase.auth.getUser();
+    if (cachedBusinessId) return cachedBusinessId;
+
+    // getSession() lee la sesión local (rápido, sin red) en vez de getUser() (red)
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) return LOCAL_USER_ID;
 
-    // Verificar si es empleado
+    // Verificar una sola vez si es empleado; luego se cachea
     const { data: emp } = await supabase
       .from('employees')
       .select('negocio_id')
       .eq('id', user.id)
-      .single();
-    
-    if (emp) return emp.negocio_id;
-    return user.id;
+      .maybeSingle();
+
+    const businessId: string = emp?.negocio_id || user.id;
+    cachedBusinessId = businessId;
+    return businessId;
   }
   return LOCAL_USER_ID;
 };
@@ -836,20 +845,29 @@ export const db = {
 
       const { data: invoicesData, error } = await query.order('fecha_emision', { ascending: false });
       if (error) throw error;
-      if (!invoicesData) return [];
+      if (!invoicesData || invoicesData.length === 0) return [];
 
-      // Enriquecer con items
-      const enriched: Invoice[] = [];
-      for (const inv of invoicesData) {
-        const { data: items } = await supabase.from('invoice_items').select('*').eq('invoice_id', inv.id);
-        const { data: charges } = await supabase.from('charges').select('*').eq('invoice_id', inv.id);
-        enriched.push({
-          ...inv,
-          items: items || [],
-          charges: charges || [],
-        });
-      }
-      return enriched;
+      // Enriquecer con items y cargos en SOLO 2 consultas (evita N+1)
+      const invoiceIds = invoicesData.map(i => i.id);
+      const { data: allItems } = await supabase.from('invoice_items').select('*').in('invoice_id', invoiceIds);
+      const { data: allCharges } = await supabase.from('charges').select('*').in('invoice_id', invoiceIds);
+
+      const itemsByInvoice: Record<string, InvoiceItem[]> = {};
+      (allItems || []).forEach((it: any) => {
+        if (!itemsByInvoice[it.invoice_id]) itemsByInvoice[it.invoice_id] = [];
+        itemsByInvoice[it.invoice_id].push(it);
+      });
+      const chargesByInvoice: Record<string, Charge[]> = {};
+      (allCharges || []).forEach((ch: any) => {
+        if (!chargesByInvoice[ch.invoice_id]) chargesByInvoice[ch.invoice_id] = [];
+        chargesByInvoice[ch.invoice_id].push(ch);
+      });
+
+      return invoicesData.map(inv => ({
+        ...inv,
+        items: itemsByInvoice[inv.id] || [],
+        charges: chargesByInvoice[inv.id] || [],
+      }));
     } else {
       initializeLocalData();
       const invoicesJson = localStorage.getItem('spinkiu_invoices');

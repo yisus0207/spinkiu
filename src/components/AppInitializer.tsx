@@ -1,16 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Lock } from 'lucide-react';
+
+const isAuthRoute = (p: string) => p === '/' || p === '/login' || p === '/register';
 
 export default function AppInitializer({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { setSession, clearSession, user, userPermissions } = useStore();
   const [isReady, setIsReady] = useState(false);
+
+  // Referencia siempre actualizada del pathname (para usar dentro de listeners sin re-suscribir)
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
 
   // Service Worker (offline) + sincronización de evidencias pendientes al reconectar
   useEffect(() => {
@@ -47,65 +53,67 @@ export default function AppInitializer({ children }: { children: React.ReactNode
     return () => document.removeEventListener('wheel', handleWheel);
   }, []);
 
+  // Inicialización de sesión (SOLO al montar). Un único listener, deduplicado y
+  // deferido para evitar el deadlock del cliente de auth de Supabase.
   useEffect(() => {
-    let unsubscribe: (() => void) | null = null;
+    let mounted = true;
+    let lastUid: string | null = null; // dedupe: evita recargar si la sesión no cambió
 
-    const checkAuth = async () => {
-      if (isSupabaseConfigured && supabase) {
-        // 1. Caso Supabase: Obtener sesión actual
-        const { data: { session } } = await supabase.auth.getSession();
-        
+    const handleSession = async (session: any) => {
+      const uid = session?.user?.id ?? 'none';
+      if (lastUid === uid) {
+        if (mounted) setIsReady(true);
+        return;
+      }
+      lastUid = uid;
+      try {
         if (session?.user) {
           await setSession(session.user);
-          // Si está en la raíz y logueado, ir a dashboard
-          if (pathname === '/' || pathname === '/login' || pathname === '/register') {
-            router.push('/dashboard');
-          }
+          if (mounted && isAuthRoute(pathnameRef.current)) router.push('/dashboard');
         } else {
           clearSession();
-          if (pathname !== '/' && pathname !== '/login' && pathname !== '/register') {
-            router.push('/');
-          }
+          if (mounted && !isAuthRoute(pathnameRef.current)) router.push('/');
         }
-
-        // Suscribirse a cambios de estado de auth
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-          if (session?.user) {
-            await setSession(session.user);
-            if (pathname === '/' || pathname === '/login' || pathname === '/register') {
-              router.push('/dashboard');
-            }
-          } else {
-            clearSession();
-            router.push('/');
-          }
-        });
-        
-        unsubscribe = () => subscription.unsubscribe();
-      } else {
-        // 2. Caso LocalStorage (Demo sin Supabase)
-        const isLocalLoggedIn = localStorage.getItem('spinkiu_logged_in') === 'true';
-        if (isLocalLoggedIn) {
-          await setSession({ id: 'local-user-uuid-1234', email: 'demo@spinkiu.com' });
-          if (pathname === '/' || pathname === '/login' || pathname === '/register') {
-            router.push('/dashboard');
-          }
-        } else {
-          clearSession();
-          if (pathname !== '/' && pathname !== '/login' && pathname !== '/register') {
-            router.push('/');
-          }
-        }
+      } finally {
+        if (mounted) setIsReady(true);
       }
-      setIsReady(true);
     };
 
-    checkAuth();
+    if (isSupabaseConfigured && supabase) {
+      // Carga inicial (sesión local, rápida)
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (mounted) handleSession(session);
+      });
 
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, [pathname, router, setSession, clearSession]);
+      // Cambios de sesión: DEFERIR con setTimeout para no llamar a Supabase
+      // dentro del callback (evita el deadlock que colgaba la app).
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setTimeout(() => { if (mounted) handleSession(session); }, 0);
+      });
+
+      return () => { mounted = false; subscription.unsubscribe(); };
+    } else {
+      // Modo local (sin Supabase)
+      const isLocalLoggedIn = localStorage.getItem('spinkiu_logged_in') === 'true';
+      if (isLocalLoggedIn) {
+        setSession({ id: 'local-user-uuid-1234', email: 'demo@spinkiu.com' }).finally(() => {
+          if (mounted) setIsReady(true);
+        });
+        if (isAuthRoute(pathnameRef.current)) router.push('/dashboard');
+      } else {
+        clearSession();
+        if (!isAuthRoute(pathnameRef.current)) router.push('/');
+        setIsReady(true);
+      }
+      return () => { mounted = false; };
+    }
+  }, [router, setSession, clearSession]);
+
+  // Redirigir a login si un usuario no autenticado navega a una ruta protegida
+  useEffect(() => {
+    if (!isReady) return;
+    if (!user && !isAuthRoute(pathname)) router.push('/');
+  }, [isReady, user, pathname, router]);
 
   // Verificar permisos por URL
   const getRequiredPermission = (path: string): string | null => {
